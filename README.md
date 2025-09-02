@@ -4,7 +4,8 @@
 
 ## 문서
 - [API 명세서](./docs/openapi.yaml)
-- [ERD](./docs/)
+- [API spec](./docs/api-spec.md)
+- [ERD](./docs/erd.md)
 - [인프라 구성도](./docs/)
 
 ## 목표 시나리오 (선정)

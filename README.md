@@ -6,7 +6,7 @@
 - [API 명세서](./docs/openapi.yaml)
 - [API spec](./docs/api-spec.md)
 - [ERD](./docs/erd.md)
-- [인프라 구성도](./docs/)
+- [인프라 구성도](./docs/infra.md)
 
 ## 목표 시나리오 (선정)
 - **대기열 기반 콘서트 예약**  

@@ -1,13 +1,6 @@
-
----
-
-## docs/api-spec.md
-
-```md
 # API 명세서 (요약)
 
 > 상세 OpenAPI는 `(./docs/openapi.yaml)`에서 확인 해주세요.
-
 
 ## 인증 & 대기열
 ### 로그인
@@ -68,6 +61,7 @@
 
 ## 에러 표준 (예시)
 - 포맷: `application/problem+json`
+
 ```json
 {
   "type": "https://errors.example.com/seat-conflict",

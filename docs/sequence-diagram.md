@@ -1,4 +1,4 @@
-# 서버 설계 – 시퀀스 다이어그램
+# 💿서버 설계 – 시퀀스 다이어그램
 
 ---
 
@@ -59,7 +59,7 @@ sequenceDiagram
 
 ---
 
-## 3) 결제 확정
+## 3) 결제 확정 
 
 ```mermaid
 sequenceDiagram

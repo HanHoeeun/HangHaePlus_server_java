@@ -69,3 +69,20 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 
 }
+dependencies {
+	// Lombok
+	compileOnly("org.projectlombok:lombok:1.18.34") // 최신 버전
+	annotationProcessor("org.projectlombok:lombok:1.18.34")
+
+	testCompileOnly("org.projectlombok:lombok:1.18.34")
+	testAnnotationProcessor("org.projectlombok:lombok:1.18.34")
+
+
+}
+dependencies {
+	testImplementation("org.springframework.boot:spring-boot-starter-test") {
+		exclude(group = "org.junit.vintage", module = "junit-vintage-engine")
+	}
+	testImplementation("org.mockito:mockito-core:5.12.0")
+	testImplementation("org.mockito:mockito-junit-jupiter:5.12.0")
+}

@@ -1,8 +1,10 @@
 // config/ReservationUseCaseConfig.java
 package kr.hhplus.be.server.config;
 
-import kr.hhplus.be.server.clean.reservation.application.*;
+import kr.hhplus.be.server.clean.reservation.application.service.ReserveSeatService;
 import kr.hhplus.be.server.clean.reservation.port.*;
+import kr.hhplus.be.server.clean.reservation.port.in.ReserveSeatUseCase;
+import kr.hhplus.be.server.clean.reservation.port.out.SeatLockPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -12,14 +14,8 @@ import java.time.*;
 public class ReservationUseCaseConfig {
 
     @Bean
-    ReserveSeatUseCase reserveSeatUseCase(SeatQueryPort seatQuery,
-                                          ReservationQueryPort reservationQuery,
-                                          ReservationCommandPort reservationCmd,
-                                          SeatLockPort lock,
-                                          TimeProvider timeProvider) {
-        return new ReserveSeatService(seatQuery, reservationQuery, reservationCmd, lock,
-                timeProvider, Duration.ofMinutes(5), Duration.ofSeconds(1));
+    ReserveSeatUseCase reserveSeatUseCase(SeatRepositoryPort seatRepository,
+                                          SeatLockPort seatLockPort) {
+        return new ReserveSeatService(seatRepository, seatLockPort);
     }
-
-    @Bean TimeProvider timeProvider(java.time.Clock clock) { return clock::instant; }
 }

@@ -1,4 +1,4 @@
-package kr.hhplus.be.server.clean.catalog.application.dto;
+package kr.hhplus.be.server.layered.catalog.dto;
 
 import java.time.Instant;
 import java.util.UUID;

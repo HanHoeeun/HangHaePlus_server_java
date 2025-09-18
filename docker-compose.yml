@@ -1,16 +1,38 @@
-version: '3'
+# docker-compose.yml  (프로젝트 루트)
 services:
   mysql:
     image: mysql:8.0
+    container_name: hhplus-mysql
     ports:
+      # 로컬에 MySQL이 이미 떠 있으면 "3307:3306"으로 바꾸고 application.yml도 3307로 맞춰줘
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_USER=application
-      - MYSQL_PASSWORD=application
-      - MYSQL_DATABASE=hhplus
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: application
+      MYSQL_PASSWORD: application
+      MYSQL_DATABASE: hhplus
     volumes:
-      - ./data/mysql/:/var/lib/mysql
+      # 가급적 숨김 폴더로 관리(.data) → 깃 무시 용이
+      - ./.data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uapplication", "-papplication"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: hhplus-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./.data/redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
 networks:
   default:

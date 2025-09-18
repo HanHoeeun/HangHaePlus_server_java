@@ -12,23 +12,27 @@
 ## 핵심 모델링 원칙
 
 * **SEAT(좌석)는 영구 상태만 유지**: `AVAILABLE` / `SOLD`
-* **임시배정(홀드)은 `RESERVATION(HELD)` + `hold_expires_at`로 표현**
+* **임시배정(홀드)은 `RESERVATION(HELD)` + `hold_expires_at`로 표현** 
+  <br>→ 만료 시 EXPIRED, 결제 시 CONFIRMED.
 * **시간축 이력**: 하나의 좌석은 시간 경과에 따라 여러 `RESERVATION`과 연결될 수 있음(1\:N)
 * **활성 예약만 중복 금지**: `UNIQUE(schedule_id, seat_number) WHERE status IN ('HELD','CONFIRMED')`
 * **Idempotency 보장**: `PAYMENT(user_id, idempotency_key)` / `WALLET_LEDGER(wallet_id, idempotency_key)` 유니크
-
+* 대기열 활성화(슬롯 할당): Redis ZSET(대기열) + active:{user}(TTL)로 활성 슬롯 N 유지
+* 일관성 보호: Redis 분산락(TTL) + DB 부분 유니크 이중 방어, Redis–DB 정합성 워커로 불일치 자동 치유
+* 거래(결제) 원자성: 하나의 트랜잭션에 wallet, wallet_ledger, payment, reservation, seat 동시 커밋
+* 가시성 레이어 분리: 화면 표시는 HELD_BY_SELF / HELD_BY_OTHERS를 실시간 홀드 유무로 가공
 ---
 ## 📊 시스템 개요
 
-| 구분        | 값                                                        |
-| --------- | -------------------------------------------------------- |
-| 전체 Entity | **10개**                                                  |
-| 도메인       | **6개** (대기열, 사용자, 카탈로그(날짜/좌석), 예약, 결제, 잔액)               |
-| 관계(주요)    | **12개 내외**                                               |
-| 좌석 범위     | 1–50번                                                    |
-| 핵심 제약     | 좌석 중복 방지, Idempotency 보장, TTL 만료, Row-level Lock         |
-| 동시성 제어    | Redis Lua(SETNX+TTL), DB 트랜잭션(SELECT…FOR UPDATE), 낙관적 버전 |
-| 확장성       | 활성 슬롯 N, 배치 승격(초당 M명), 멀티 AZ/오토스케일                       |
+| 구분        | 값                                                               |
+| --------- |-----------------------------------------------------------------|
+| 전체 Entity | **10개**                                                         |
+| 도메인       | **6개** (대기열, 사용자, 카탈로그(날짜/좌석), 예약, 결제, 잔액)                      |
+| 관계(주요)    | **12개 내외**                                                      |
+| 좌석 범위     | 1–50번                                                           |
+| 핵심 제약     | 좌석 중복 방지, Idempotency 보장, TTL 만료, Row-level Lock                |
+| 동시성 제어    | Redis Lua(SETNX+TTL), DB 트랜잭션(SELECT…FOR UPDATE), 낙관적 버전, 정합성워커 |
+| 확장성       | 활성 슬롯 N, 배치 승격(초당 M명), 멀티 AZ/오토스케일                              |
 
 --- 
 ### 확장 요약
@@ -90,7 +94,19 @@ erDiagram
   USER {
     string user_id PK
     string email
-    long balance
+    string name
+    datetime created_at
+    datetime updated_at
+  }
+  QUEUE_TOKEN {
+    string token PK
+    string user_id FK
+    int position
+    enum status "WAITING|ACTIVE|EXPIRED"
+    datetime activated_at
+    datetime expires_at
+    datetime created_at
+    datetime updated_at
   }
 
   %% Reservation/Payment
@@ -100,7 +116,7 @@ erDiagram
     string schedule_id FK
     int seat_number
     enum status "HELD|CONFIRMED|CANCELED|EXPIRED"
-    datetime expired_at "hold expires at"
+    datetime hold_expires_at "hold expires at"
     long amount
     int version "optimistic"
     datetime created_at
@@ -110,9 +126,10 @@ erDiagram
     string payment_id PK
     string user_id FK
     string reservation_id FK
-    enum status "SUCCESS|FAILED|CANCEL"
+    enum status "CAPTURED|FAILED"
     long amount
     string idempotency_key
+    datetime paid_at
     datetime created_at
   }
   PAYMENT_HISTORY {
@@ -124,25 +141,47 @@ erDiagram
     datetime created_at
   }
 
-  %% Relationships
+%% Wallet
+  WALLET {
+    string wallet_id PK
+    string user_id FK
+    long balance
+    datetime created_at
+    datetime updated_at
+  }
+  WALLET_LEDGER {
+    string ledger_id PK
+    string wallet_id FK
+    enum type "CHARGE|DEBIT|REFUND|ADJUST"
+    long amount
+    string idempotency_key
+    datetime created_at
+  }
+  
+%% Relationships
   CONCERT ||--o{ CONCERT_SCHEDULE : has
   CONCERT_SCHEDULE ||--o{ SEAT : contains
   CONCERT_SCHEDULE ||--o{ RESERVATION : scheduled_for
-  USER ||--o{ RESERVATION : makes
-  RESERVATION ||--|| PAYMENT : paid_by
-  PAYMENT ||--o{ PAYMENT_HISTORY : tracks
   SEAT ||--o{ RESERVATION : history_by_seat_number
+  USER ||--o{ RESERVATION : makes
+  USER ||--o{ PAYMENT : pays
+  RESERVATION ||--|| PAYMENT : one_to_one
+  PAYMENT ||--o{ PAYMENT_HISTORY : tracks
+  USER ||--|| WALLET : owns
+  WALLET ||--o{ WALLET_LEDGER : has
+  USER ||--o{ QUEUE_TOKEN : queue_entries
 
 ```
 ---
 ## index/query 계획 표
 
-| 테이블      | 핵심 쿼리             | 인덱스                                 | 기대 효과    |
-| -------- | ----------------- | ----------------------------------- | -------- |
-| seats    | date+seatNo 조회/잠금 | (concert\_date, seat\_no) UNIQUE    | 경합 최소화   |
-| payments | Idempotency 검사            | (user\_id, idempotency\_key) UNIQUE | 중복 결제 방지 |
-
-
+| 테이블      | 핵심 쿼리                                              | 인덱스                                 | 기대 효과    |
+| -------- |----------------------------------------------------| ----------------------------------- | -------- |
+| **seats**          | `WHERE schedule_id=? ORDER BY seat_number`         | `UNIQUE(schedule_id, seat_number)`            | 회차 내 좌석 고유 + 목록 정렬 빠름     |
+| **reservation**    | *활성 중복 방지/가용 체크*                                   | `INDEX(schedule_id, seat_number, status)` | 중복 배정 방지(하드스톱) / 가용 판단 보조 |
+| **payments**       | *멱등성 검사*                                           | `UNIQUE(user_id, idempotency_key)`         | 재시도에도 1회 처리               |
+| **wallet\_ledger** | *충전/차감 멱등*                                         | `UNIQUE(wallet_id, idempotency_key)`        | 지갑 원장 중복 방지               |
+| **queue\_token**   | `WHERE status='WAITING' ORDER BY position LIMIT ?` | `INDEX(status, position)`                      | 대기열 조회/선정 O(logN)         |
 
 
 
@@ -173,14 +212,14 @@ erDiagram
 
 **SEAT**
 
-| 필드                        | 타입       | 설명                                                     |
-| ------------------------- | -------- | ------------------------------------------------------ |
-| seat\_id (PK)             | UUID     | 좌석 ID                                                  |
-| schedule\_id (FK)         | UUID     | 스케줄 ID                                                 |
-| seat\_number              | Int      | 좌석번호(1\~50)                                            |
-| price                     | Int      | 가격                                                     |
-| status                    | Enum     | `AVAILABLE` / `SOLD` *(표시는 `HELD_BY_SELF/OTHERS`로 가공)* |
-| created\_at / updated\_at | DateTime | 생성/수정                                                  |
+| 필드                        | 타입       | 설명                    |
+| ------------------------- | -------- |-----------------------|
+| seat\_id (PK)             | UUID     | 좌석 ID                 |
+| schedule\_id (FK)         | UUID     | 스케줄 ID                |
+| seat\_number              | Int      | 좌석번호(1\~50)           |
+| price                     | Int      | 가격                    |
+| status                    | Enum     | `AVAILABLE` / `SOLD`  |
+| created\_at / updated\_at | DateTime | 생성/수정                 |
 
 > 제약: **Unique(schedule\_id, seat\_number)** – 회차 내 좌석 고유
 
@@ -190,12 +229,12 @@ erDiagram
 
 **USER**
 
-| 필드                        | 타입       | 설명             |
-| ------------------------- | -------- | -------------- |
-| user\_id (PK)             | UUID     | 사용자 ID         |
-| email                     | String   | 이메일(Unique 권장) |
-| name                      | String   | 이름             |
-| created\_at / updated\_at | DateTime | 생성/수정          |
+| 필드                        | 타입       | 설명 |
+|---------------------------| -------- | -- |
+| user\_id (PK)             | UUID     | 사용자 ID |
+| email(UNIQUE)                 | String   | 이메일|
+| name                      | String   | 이름 |
+| created\_at / updated\_at | DateTime | 생성/수정 |
 
 **QUEUE\_TOKEN**
 
@@ -215,13 +254,13 @@ erDiagram
 **RESERVATION**
 
 | 필드                        | 타입       | 설명                                            |
-| ------------------------- | -------- | --------------------------------------------- |
+| ------------------------- | -------- |-----------------------------------------------|
 | reservation\_id (PK)      | UUID     | 예약 ID                                         |
 | user\_id (FK)             | UUID     | 사용자                                           |
 | schedule\_id (FK)         | UUID     | 회차                                            |
 | seat\_number              | Int      | 좌석 번호                                         |
 | status                    | Enum     | `HELD` / `CONFIRMED` / `CANCELED` / `EXPIRED` |
-| hold\_expires\_at         | DateTime | 임시배정 만료                                       |
+| hold\_expires\_at         | DateTime | 임시배정 만료 시각                                    |
 | amount                    | Int      | 결제 예정 금액                                      |
 | version                   | Int      | Optimistic Locking 버전                         |
 | created\_at / updated\_at | DateTime | 생성/수정                                         |
@@ -319,21 +358,46 @@ CREATE UNIQUE INDEX ux_wallet_ledger_idem ON wallet_ledger(wallet_id, idempotenc
 ## 📋 Enum 정의 (Java 예시)
 
 ```java
-public enum QueueStatus { WAITING, ACTIVE, EXPIRED }
+public enum QueueStatus {
+  WAITING, ACTIVE, EXPIRED;
+  public boolean isActive() { return this == ACTIVE; }
+}
 
 public enum SeatStatus {
   AVAILABLE,  // 판매 가능 (DB 저장)
-  SOLD        // 판매 완료 (DB 저장)
-  // 프론트 표시는 HELD_BY_SELF / HELD_BY_OTHERS 로 가공
+  SOLD;       // 판매 완료 (DB 저장)
+  public boolean isAvailable() { return this == AVAILABLE; }
+  public boolean isSold()      { return this == SOLD; }
 }
 
-public enum ReservationStatus { HELD, CONFIRMED, CANCELED, EXPIRED }
+// 활성 예약(좌석 중복 방지 인덱스 대상)은 HELD, CONFIRMED 두 상태
+public enum ReservationStatus {
+  HELD, CONFIRMED, CANCELED, EXPIRED;
 
-public enum PaymentStatus { CAPTURED, FAILED }
+  /** 좌석 고유 제약(부분 유니크)에 포함되는 활성 상태인지 */
+  public boolean countsAsActiveSeat() {
+    return this == HELD || this == CONFIRMED;
+  }
+  /** 최종 상태(되돌릴 수 없음)인지 */
+  public boolean isTerminal() {
+    return this == CONFIRMED || this == CANCELED || this == EXPIRED;
+  }
+}
 
-public enum PaymentHistoryStatus { CAPTURED, FAILED, REFUNDED, CANCELED }
+public enum PaymentStatus {
+  CAPTURED, FAILED;
+  public boolean isCaptured() { return this == CAPTURED; }
+  public boolean isFailed()   { return this == FAILED; }
+}
 
-public enum LedgerType { CHARGE, DEBIT, REFUND, ADJUST }
+public enum PaymentHistoryStatus {
+  CAPTURED, FAILED, REFUNDED, CANCELED
+}
+
+public enum LedgerType {
+  CHARGE, DEBIT, REFUND, ADJUST
+}
+
 ```
 
 ---

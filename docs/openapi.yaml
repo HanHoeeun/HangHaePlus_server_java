@@ -11,12 +11,16 @@ tags:
     description: 로그인/회원가입
   - name: Queue
     description: 대기 관리
+  - name: Catalog
+    description: 공연(회차)/좌석 가용 조회
   - name: Reservation
     description: 좌석 예약/취소
   - name: Wallet
     description: 포인트 잔액/충전
   - name: Payment
     description: 결제 확정
+security:
+  - bearerAuth: []   # 전역 JWT 보안 (개별 엔드포인트에서 제거 가능)
 
 paths:
   /auth/login:
@@ -41,11 +45,15 @@ paths:
                 $ref: '#/components/schemas/TokenResponse'
         '401':
           description: 인증 실패
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /queue/tokens:
     post:
       tags: [Queue]
       summary: 대기열 토큰 발급
+      security: []   # 로그인 없이 발급한다면 전역 보안 해제
       responses:
         '201':
           description: 성공
@@ -55,11 +63,88 @@ paths:
                 $ref: '#/components/schemas/QueueTokenResponse'
         '429':
           description: 대기열 만석
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /queue/status:
+    get:
+      tags: [Queue]
+      summary: 대기열 상태 조회
+      security: []   # 로그인 없이 조회 가능하면 유지
+      parameters:
+        - $ref: '#/components/parameters/XQueueToken'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueStatusResponse'
+        '404':
+          description: 토큰 없음/만료
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /concerts/{concertId}/shows:
+    get:
+      tags: [Catalog]
+      summary: 공연(회차) 목록 + 가용 좌석 수
+      parameters:
+        - in: path
+          name: concertId
+          schema: { type: string, format: uuid }
+          required: true
+        - $ref: '#/components/parameters/XQueueToken'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ShowAvailability' }
+        '403':
+          description: 대기열 토큰 미활성
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /concerts/{concertId}/shows/{scheduleId}/seats:
+    get:
+      tags: [Catalog]
+      summary: 특정 회차의 좌석 가용성
+      parameters:
+        - in: path
+          name: concertId
+          schema: { type: string, format: uuid }
+          required: true
+        - in: path
+          name: scheduleId
+          schema: { type: string, format: uuid }
+          required: true
+        - $ref: '#/components/parameters/XQueueToken'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SeatAvailability' }
+        '403':
+          description: 대기열 토큰 미활성
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /reservations:
     post:
       tags: [Reservation]
       summary: 좌석 예약(임시 배정)
+      parameters:
+        - $ref: '#/components/parameters/XQueueToken'
       requestBody:
         required: true
         content:
@@ -74,12 +159,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReservationResponse'
         '409':
-          description: 좌석 충돌
+          description: 좌석 충돌(다른 사용자에 의해 HELD/SOLD)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: 대기열 토큰 미활성
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /wallet/balance:
     get:
       tags: [Wallet]
       summary: 잔액 조회
+      parameters:
+        - $ref: '#/components/parameters/XQueueToken'
       responses:
         '200':
           description: 성공
@@ -87,16 +182,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WalletBalance'
+        '403':
+          description: 대기열 토큰 미활성
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /payments:
     post:
       tags: [Payment]
       summary: 결제 확정
       parameters:
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema: { type: string }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XQueueToken'
       requestBody:
         required: true
         content:
@@ -111,7 +209,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaymentResponse'
         '409':
-          description: 상태 충돌(잔액 부족/만료 등)
+          description: 상태 충돌(잔액 부족/홀드 만료/이미 확정)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: 대기열 토큰 미활성
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
 components:
   securitySchemes:
@@ -120,7 +226,30 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  parameters:
+    XQueueToken:
+      in: header
+      name: X-Queue-Token
+      required: true
+      schema: { type: string, example: qtk_abc123 }
+      description: ACTIVE 상태의 대기열 토큰
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema: { type: string, example: idem-20250903-0001 }
+      description: 중복 요청 방지용 키(결제/충전)
+
   schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string, example: https://errors.example.com/seat-conflict }
+        title: { type: string, example: Seat already held }
+        status: { type: integer, example: 409 }
+        detail: { type: string, example: Seat A-12 is temporarily held by another user. }
+        instance: { type: string, example: /api/v1/reservations }
+
     TokenResponse:
       type: object
       properties:
@@ -132,12 +261,44 @@ components:
       properties:
         token: { type: string, example: qtk_abc123 }
         position: { type: integer, example: 12 }
+        status: { type: string, enum: [WAITING, ACTIVE], example: WAITING }
         etaSeconds: { type: integer, example: 300 }
+        activeTtlSeconds: { type: integer, nullable: true, example: 280 }
+
+    QueueStatusResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [WAITING, ACTIVE, EXPIRED] }
+        position: { type: integer, nullable: true, example: 10 }
+        etaSeconds: { type: integer, nullable: true, example: 240 }
+        activeTtlSeconds: { type: integer, nullable: true, example: 300 }
+
+    ShowAvailability:
+      type: object
+      properties:
+        scheduleId: { type: string, format: uuid }
+        showAt: { type: string, format: date-time }
+        totalSeats: { type: integer, example: 50 }
+        availableSeats: { type: integer, example: 42 }
+
+    SeatAvailability:
+      type: object
+      properties:
+        seatNumber: { type: integer, example: 12 }
+        price: { type: integer, example: 150000 }
+        label:
+          type: string
+          enum: [AVAILABLE, HELD_BY_SELF, HELD_BY_OTHERS, SOLD]
+        holdExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
 
     ReservationRequest:
       type: object
+      required: [showId, seatIds]
       properties:
-        showId: { type: integer, example: 202 }
+        showId: { type: string, format: uuid, example: "8a7f2b1e-9b7d-4e3c-9a11-9a7d2ad1c001" }
         seatIds:
           type: array
           items: { type: integer, example: 12 }
@@ -145,9 +306,10 @@ components:
     ReservationResponse:
       type: object
       properties:
-        reservationId: { type: integer, example: 5001 }
+        reservationId: { type: string, format: uuid, example: "9aa0d7b4-0c9e-4b8a-9b2e-001122334455" }
         status: { type: string, enum: [HELD, CONFIRMED] }
         expiresAt: { type: string, format: date-time }
+        totalAmount: { type: integer, example: 300000 }
 
     WalletBalance:
       type: object
@@ -157,13 +319,14 @@ components:
 
     PaymentRequest:
       type: object
+      required: [reservationId, amount]
       properties:
-        reservationId: { type: integer, example: 5001 }
+        reservationId: { type: string, format: uuid }
         amount: { type: integer, example: 300000 }
 
     PaymentResponse:
       type: object
       properties:
-        paymentId: { type: integer, example: 9001 }
-        status: { type: string, enum: [SUCCEEDED, FAILED] }
+        paymentId: { type: string, format: uuid }
+        status: { type: string, enum: [CAPTURED, FAILED] }
         paidAt: { type: string, format: date-time }

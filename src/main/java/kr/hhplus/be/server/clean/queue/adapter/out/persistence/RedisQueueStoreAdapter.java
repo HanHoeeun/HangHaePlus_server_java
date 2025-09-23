@@ -2,9 +2,11 @@ package kr.hhplus.be.server.clean.queue.adapter.out.persistence;
 
 import kr.hhplus.be.server.clean.queue.domain.entity.QueueToken;
 import kr.hhplus.be.server.clean.queue.port.out.QueueStorePort;
+import kr.hhplus.be.server.domain.enums.QueueStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 public class RedisQueueStoreAdapter implements QueueStorePort {
@@ -26,7 +28,23 @@ public class RedisQueueStoreAdapter implements QueueStorePort {
     @Override
     public int countWaiting() {
         return (int) store.values().stream()
-                .filter(t -> t.getStatus().name().equals("WAITING"))
+                .filter(t -> t.getStatus() == QueueStatus.WAITING)
                 .count();
+    }
+
+    @Override
+    public long countActive() {
+        return store.values().stream()
+                .filter(t -> t.getStatus() == QueueStatus.ACTIVE)
+                .count();
+    }
+
+    @Override
+    public List<QueueToken> findOldestWaiting(int limit) {
+        return store.values().stream()
+                .filter(t -> t.getStatus() == QueueStatus.WAITING)
+                .sorted(Comparator.comparingInt(QueueToken::getPosition)) // 대기 순서대로
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 }

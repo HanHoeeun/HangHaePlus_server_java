@@ -3,12 +3,14 @@ package kr.hhplus.be.server.clean.reservation.application.service;
 import kr.hhplus.be.server.clean.reservation.application.dto.ReserveSeatCommand;
 import kr.hhplus.be.server.clean.reservation.application.dto.ReserveSeatResult;
 import kr.hhplus.be.server.clean.reservation.domain.entity.Seat;
+import kr.hhplus.be.server.clean.reservation.port.in.ReserveSeatUseCase;
 import kr.hhplus.be.server.clean.reservation.port.out.SeatRepositoryPort;
 import kr.hhplus.be.server.clean.reservation.port.out.SeatLockPort;
 
 import java.util.UUID;
 
-public class ReserveSeatService {
+public class ReserveSeatService implements ReserveSeatUseCase {
+
     private final SeatRepositoryPort seatRepository;
     private final SeatLockPort seatLockPort;
 
@@ -17,6 +19,7 @@ public class ReserveSeatService {
         this.seatLockPort = seatLockPort;
     }
 
+    @Override
     public ReserveSeatResult reserve(ReserveSeatCommand command) {
         UUID seatId = command.seatId();
         seatLockPort.lock(seatId);

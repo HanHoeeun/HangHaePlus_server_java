@@ -4,10 +4,12 @@ import kr.hhplus.be.server.clean.reservation.domain.entity.Seat;
 import kr.hhplus.be.server.domain.enums.SeatStatus;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
+
 @Component
 public class SeatMapper {
 
-    public Seat toDomain(SeatJpaEntity entity) {
+    public static Seat toDomain(SeatJpaEntity entity) {
         return new Seat(
                 entity.getId(),
                 entity.getSeatNumber(),
@@ -16,7 +18,7 @@ public class SeatMapper {
         );
     }
 
-    public SeatJpaEntity toEntity(Seat seat) {
+    public static SeatJpaEntity toEntity(Seat seat, UUID uuid) {
         return new SeatJpaEntity(
                 seat.getId(),
                 seat.getSeatNumber(),

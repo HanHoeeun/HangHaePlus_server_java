@@ -21,7 +21,7 @@ public class WalletController {
     }
 
     @GetMapping("/balance/{userId}")
-    public WalletBalanceResult getBalance(@PathVariable String userId) {
+    public WalletBalanceResult getBalance(@PathVariable UUID userId) {
         return walletUseCase.getBalance(userId);
     }
 }

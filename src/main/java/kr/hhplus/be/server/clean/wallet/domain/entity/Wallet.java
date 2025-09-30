@@ -30,4 +30,10 @@ public class Wallet {
         this.balance -= amount;
     }
 
+    /** 결제 가능 여부 확인 */
+    public boolean canPay(long amount) {
+        return this.balance >= amount;
+    }
+
+
 }

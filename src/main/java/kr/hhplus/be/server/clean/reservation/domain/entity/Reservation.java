@@ -1,16 +1,21 @@
 package kr.hhplus.be.server.clean.reservation.domain.entity;
 
 import kr.hhplus.be.server.domain.enums.SeatStatus;
+import lombok.Getter;
+
 import java.util.UUID;
 
+@Getter
 public class Reservation {
     private final UUID id;
+    private final UUID userId;
     private final UUID seatId;
     private SeatStatus status;
     private final long amount;
 
-    public Reservation(UUID id, UUID seatId, SeatStatus status, long amount) {
+    public Reservation(UUID id, UUID userId, UUID seatId, SeatStatus status, long amount) {
         this.id = id;
+        this.userId = userId;
         this.seatId = seatId;
         this.status = status;
         this.amount = amount;
@@ -23,7 +28,4 @@ public class Reservation {
         this.status = SeatStatus.RESERVED;
     }
 
-    public SeatStatus getStatus() { return status; }
-    public UUID getId() { return id; }
-    public UUID getSeatId() { return seatId; }
 }

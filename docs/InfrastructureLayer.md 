@@ -1,0 +1,246 @@
+# Infrastructure Layer 구성 정리
+
+도메인별로 외부 시스템과의 연동을 담당하는 **Adapter(구현체)**들을 명시합니다.
+DB, Redis, 외부 API, 설정 클래스 등 모든 "외부 세계와의 연결"은 이 계층에서 처리합니다.
+
+---
+
+## 📁 프로젝트 디렉토리 구조
+
+```text
+.
+├── ServerApplication.java                        ← SpringBoot Main Class
+├── clean
+│   ├── queue
+│   │   ├── adapter
+│   │   │   ├── in
+│   │   │   │   └── web
+│   │   │   │       ├── QueueController.java      ← API Adapter (입력)
+│   │   │   │       └── response                   ← 응답 DTO
+│   │   │   └── out
+│   │   │       └── persistence
+│   │   │           └── RedisQueueStoreAdapter.java ← Infra Adapter (Redis 구현체)
+│   │   ├── application
+│   │   │   ├── dto
+│   │   │   │   ├── QueueIssueResult.java         ← UseCase 응답 DTO
+│   │   │   │   └── QueueStatusResult.java        ← UseCase 응답 DTO
+│   │   │   └── service
+│   │   │       ├── QueuePromotionJob.java        ← 스케줄러
+│   │   │       └── QueueService.java             ← UseCase 구현체
+│   │   ├── domain
+│   │   │   └── entity
+│   │   │       └── QueueToken.java               ← 도메인 엔티티
+│   │   └── port
+│   │       ├── in
+│   │       │   └── QueueUseCase.java             ← UseCase 인터페이스 (입력 포트)
+│   │       └── out
+│   │           └── QueueStorePort.java           ← 외부 저장소 인터페이스 (출력 포트)
+│
+│   ├── reservation
+│   │   ├── adapter
+│   │   │   ├── in
+│   │   │   │   └── web
+│   │   │   │       ├── ConfirmReservationController.java ← API Adapter
+│   │   │   │       ├── ReservationController.java        ← API Adapter
+│   │   │   │       └── ReservationQueryController.java   ← API Adapter
+│   │   │   └── out
+│   │   │       ├── lock
+│   │   │       │   └── RedisSeatLockAdapter.java         ← Infra Adapter (Lock)
+│   │   │       └── persistence
+│   │   │           ├── ReservationJpaEntity.java         ← JPA Entity
+│   │   │           ├── SeatJpaEntity.java                ← JPA Entity
+│   │   │           ├── SpringDataReservationRepository.java ← Spring Data
+│   │   │           ├── SpringDataSeatRepository.java     ← Spring Data
+│   │   │           ├── ReservationJpaRepository.java     ← JpaRepository
+│   │   │           ├── SeatJpaRepository.java            ← JpaRepository
+│   │   │           ├── ReservationJpaRepositoryAdapter.java ← Repository 구현체
+│   │   │           ├── SeatJpaRepositoryAdapter.java     ← Repository 구현체
+│   │   │           ├── ScheduleRepositoryAdapter.java    ← Repository 구현체
+│   │   │           ├── ReservationMapper.java            ← Entity ↔ Domain 변환
+│   │   │           └── SeatMapper.java                   ← Entity ↔ Domain 변환
+│   │   ├── application
+│   │   │   ├── dto
+│   │   │   │   ├── AvailableDatesResult.java             ← UseCase 응답 DTO
+│   │   │   │   ├── AvailableSeatsResult.java             ← UseCase 응답 DTO
+│   │   │   │   ├── ConfirmReservationCommand.java        ← UseCase 요청 DTO
+│   │   │   │   ├── ReserveSeatCommand.java               ← UseCase 요청 DTO
+│   │   │   │   └── ReserveSeatResult.java                ← UseCase 응답 DTO
+│   │   │   └── service
+│   │   │       ├── ConfirmReservationService.java        ← UseCase 구현체
+│   │   │       ├── ReservationQueryService.java          ← UseCase 구현체
+│   │   │       └── ReserveSeatService.java               ← UseCase 구현체
+│   │   ├── domain
+│   │   │   ├── entity
+│   │   │   │   ├── Reservation.java                      ← 도메인 엔티티
+│   │   │   │   └── Seat.java                             ← 도메인 엔티티
+│   │   │   ├── factory
+│   │   │   │   └── ReservationFactory.java               ← 도메인 생성 로직
+│   │   │   └── valueobject                               ← 값 객체 모음
+│   │   └── port
+│   │       ├── in
+│   │       │   ├── ConfirmReservationUseCase.java        ← 입력 포트
+│   │       │   ├── ReservationQueryUseCase.java          ← 입력 포트
+│   │       │   └── ReserveSeatUseCase.java               ← 입력 포트
+│   │       └── out
+│   │           ├── PaymentServicePort.java               ← 외부 결제 포트
+│   │           ├── ReservationRepositoryPort.java        ← 도메인 저장소 포트
+│   │           ├── ScheduleRepositoryPort.java           ← 스케줄 저장소 포트
+│   │           ├── SeatLockPort.java                     ← 동시성 락 포트
+│   │           ├── SeatRepositoryPort.java               ← 좌석 저장소 포트
+│   │           └── TimeProvider.java                     ← 시간 추상화 포트
+│
+│   └── wallet
+│       ├── adapter
+│       │   ├── in
+│       │   │   └── web
+│       │   │       └── WalletController.java             ← API Adapter
+│       │   └── out
+│       │       └── persistence
+│       │           ├── WalletRepositoryAdapter.java      ← Repository 구현체
+│       │           └── WalletServiceAdapter.java         ← 외부 결제 연동 구현체
+│       ├── application
+│       │   ├── dto
+│       │   │   ├── WalletBalanceResult.java              ← UseCase 응답 DTO
+│       │   │   └── WalletChargeCommand.java              ← UseCase 요청 DTO
+│       │   └── service
+│       │       └── WalletService.java                    ← UseCase 구현체
+│       ├── domain
+│       │   └── entity
+│       │       └── Wallet.java                           ← 도메인 엔티티
+│       └── port
+│           ├── in
+│           │   └── WalletUseCase.java                    ← 입력 포트
+│           └── out
+│               ├── WalletRepositoryPort.java             ← 저장소 포트
+│               └── WalletServicePort.java                ← 외부 결제 포트
+│
+├── config
+│   ├── ReservationUseCaseConfig.java                     ← Spring Config
+│   ├── WebConfig.java                                    ← Web 설정
+│   └── jpa
+│       └── JpaConfig.java                                ← JPA 설정
+│
+├── domain
+│   └── enums
+│       ├── LedgerType.java                               ← 공통 Enum
+│       ├── PaymentStatus.java                            ← 결제 상태
+│       ├── QueueStatus.java                              ← 대기열 상태
+│       ├── ResevationStatus.java                         ← 예약 상태
+│       └── SeatStatus.java                               ← 좌석 상태
+│
+└── layered
+    └── catalog
+        ├── CatalogController.java                        ← API Controller
+        ├── CatalogRepository.java                        ← Repository (조회 전용)
+        ├── CatalogService.java                           ← Service (조회 전용)
+        ├── dto
+        │   ├── SeatAvailabilityDto.java                  ← 조회 DTO
+        │   └── ShowAvailabilityDto.java
+        └── persistence
+            ├── ConcertSchedule.java                      ← JPA Entity
+            ├── ConcertScheduleRepository.java            ← JpaRepository
+            ├── Reservation.java                          ← JPA Entity
+            ├── ReservationRepository.java
+            ├── Seat.java
+            └── SeatRepository.java
+
+```
+
+## 📦 Reservation Infrastructure
+
+| 계층         | 클래스명                             | 설명                                      |
+|--------------|--------------------------------------|-------------------------------------------|
+| Persistence  | `SeatJpaRepositoryAdapter`           | 좌석 정보를 DB에서 조회 및 저장           |
+|              | `ReservationJpaRepositoryAdapter`    | 예약 정보를 DB에 저장/조회                |
+|              | `ScheduleRepositoryAdapter`          | 공연 스케줄을 조회                        |
+| Mapper       | `SeatMapper`, `ReservationMapper`    | 도메인 Entity ↔ JPA Entity 변환 처리      |
+| Lock         | `RedisSeatLockAdapter`               | 좌석 예약 시 동시성 제어 (분산 Lock)      |
+| Spring Data  | `SpringDataReservationRepository`    | Spring Data 기반 Reservation 인터페이스  |
+|              | `SpringDataSeatRepository`           | Spring Data 기반 Seat 인터페이스         |
+
+---
+
+## 📦 Queue Infrastructure
+
+| 계층        | 클래스명                   | 설명                                      |
+|-------------|----------------------------|-------------------------------------------|
+| Persistence | `RedisQueueStoreAdapter`   | 대기열 토큰 발급, 조회, 갱신              |
+
+---
+
+## 📦 Wallet Infrastructure
+
+| 계층        | 클래스명                     | 설명                                      |
+|-------------|------------------------------|-------------------------------------------|
+| Persistence | `WalletRepositoryAdapter`    | 유저 지갑 정보 DB 저장/조회               |
+| Service     | `WalletServiceAdapter`       | 실제 결제 처리 (잔액 차감 등 도메인 위임) |
+
+---
+
+## ⚙️ 공통 Configuration
+
+| 구분     | 클래스명                       | 설명                                       |
+|----------|--------------------------------|--------------------------------------------|
+| Config   | `JpaConfig`                    | JPA 설정, 트랜잭션 관리                    |
+| Config   | `WebConfig`                    | CORS, Interceptor 등 전역 웹 설정          |
+| Config   | `ReservationUseCaseConfig`     | Reservation 유즈케이스 수동 등록 (Bean 구성) |
+
+---
+
+## ✅ 정리 기준
+
+- `adapter.out.*`은 모두 Infrastructure Layer 소속
+- Repository, Redis, 외부 API 호출 등 **구현체**는 이 계층에서만 정의
+- Domain Layer와는 `port` 인터페이스로만 연결
+- 설정(Config)은 `config/` 하위에 모아 관리
+
+---
+
+
+## 📁 테스트 디렉터리 구조
+
+```text
+.
+├── clean
+│   ├── queue
+│   │   ├── application
+│   │   │   └── service
+│   │   │       └── QueueServiceTest.java                   ← 유즈케이스 단위 테스트
+│   │   └── integration
+│   │       └── QueueTokenConcurrencyTest.java              ← 대기열 중복 발급 테스트 (동시성)
+│
+│   ├── reservation
+│   │   ├── application
+│   │   │   └── service
+│   │   │       ├── ConfirmReservationServiceTest.java      ← 예약 확정 유즈케이스 테스트
+│   │   │       ├── ReservationQueryServiceTest.java        ← 예약 조회 유즈케이스 테스트
+│   │   │       └── ReserveSeatServiceTest.java             ← 좌석 예약 유즈케이스 테스트
+│   │   └── integration
+│   │       ├── ReservationConcurrencyTest.java             ← 좌석 동시 예약 테스트
+│   │       ├── ReservationExpireIntegrationTest.java       ← 만료 시 좌석 상태 확인 테스트
+│   │       ├── ReservationExpireWithTimeProviderTest.java  ← TimeProvider 기반 만료 시간 테스트
+│   │       ├── ReservationFlowIntegrationTest.java         ← 토큰 → 예약 → 결제 흐름 통합 테스트
+│   │       ├── ReservationPaymentIdempotencyTest.java      ← 중복 결제 요청 멱등성 테스트
+│   │       └── SeatExpirationIntegrationTest.java          ← 좌석 만료 후 재예약 가능 여부 테스트
+│
+│   └── wallet
+│       ├── application
+│       │   └── service
+│       │       └── WalletServiceTest.java                  ← 지갑 유즈케이스 단위 테스트
+│       └── integration
+│           └── WalletPaymentConcurrencyTest.java           ← 결제 중복 요청 동시성 테스트
+│
+└── layered
+    └── catalog
+        ├── CatalogControllerTest.java                      ← Controller 계층 테스트
+        └── CatalogServiceTest.java                         ← 조회용 Service 테스트
+
+```
+---
+
+🔍 **정리 기준**
+- `application/service` 아래: 유즈케이스/도메인 로직 단위 테스트  
+- `integration`: 여러 계층(포트, 어댑터 포함) 간 통합 테스트 / 실제 흐름 시나리오 테스트  
+- `layered/catalog`: 조회 전용 계층의 단위 테스트  
+
+---

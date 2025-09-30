@@ -24,10 +24,13 @@ public class ReservationController {
     public ResponseEntity<?> reserve(@RequestBody Req req,
                                      @RequestHeader("X-User-Id") UUID userId) {
         if (req.seatIds() == null || req.seatIds().isEmpty())
-            return ResponseEntity.badRequest().body(Map.of("code","VALIDATION_ERROR","message","seatIds required"));
+            return ResponseEntity.badRequest().body(Map.of(
+                    "code","VALIDATION_ERROR","message","seatIds required"
+            ));
 
-        int seatNo = req.seatIds().get(0); // 1좌석 처리
+        int seatNo = req.seatIds().get(0); // 단일 좌석 처리
         var result = reserveSeat.reserve(new ReserveSeatCommand(userId, req.showId(), seatNo));
+
         return ResponseEntity.status(201).body(Map.of(
                 "reservationId", result.reservationId(),
                 "status", result.status(),
@@ -35,4 +38,6 @@ public class ReservationController {
                 "totalAmount", result.totalAmount()
         ));
     }
+
+
 }

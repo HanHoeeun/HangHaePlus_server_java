@@ -14,10 +14,26 @@ public class Wallet {
     public UUID getUserId() { return userId; }
     public long getBalance() { return balance; }
 
+    /** 잔액 충전 */
     public void charge(long amount) {
         if (amount <= 0) {
             throw new IllegalArgumentException("충전 금액은 0보다 커야 합니다.");
         }
         this.balance += amount;
     }
+
+    /** 잔액 차감 */
+    public void deduct(long amount) {
+        if (balance < amount) {
+            throw new IllegalStateException("잔액 부족");
+        }
+        this.balance -= amount;
+    }
+
+    /** 결제 가능 여부 확인 */
+    public boolean canPay(long amount) {
+        return this.balance >= amount;
+    }
+
+
 }

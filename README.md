@@ -36,7 +36,7 @@ src/main/java/kr/hhplus/be/server
     └── catalog       # ✅ 조회 전용 (레이어드 아키텍처)
 
 ```
-🛠 Infrastructure Layer 구조
+## 🛠 Infrastructure Layer 구조
 ```bash
 clean/{domain}/adapter
 ├── in/

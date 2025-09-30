@@ -22,7 +22,7 @@ public class ConfirmReservationService implements ConfirmReservationUseCase {
             throw new IllegalStateException("결제 실패");
         }
 
-        reservation.confirmPayment();
+        reservation.confirmPayment();   // ✅ domain/entity/Reservation 메서드 활용
         return reservationRepository.save(reservation);
     }
 }

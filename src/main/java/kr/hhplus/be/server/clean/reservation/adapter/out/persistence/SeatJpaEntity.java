@@ -11,9 +11,6 @@ public class SeatJpaEntity {
     @Column(name = "seat_id", nullable = false)
     private UUID id;
 
-    @Column(name = "seat_number", nullable = false)
-    private int seatNumber;
-
     @Column(name = "price", nullable = false)
     private long price;
 
@@ -22,15 +19,13 @@ public class SeatJpaEntity {
 
     protected SeatJpaEntity() {}
 
-    public SeatJpaEntity(UUID id, int seatNumber, String status, long price) {
+    public SeatJpaEntity(UUID id, long price, String status) {
         this.id = id;
-        this.seatNumber = seatNumber;
-        this.status = status;
         this.price = price;
+        this.status = status;
     }
 
     public UUID getId() { return id; }
-    public int getSeatNumber() { return seatNumber; }
     public long getPrice() { return price; }
     public String getStatus() { return status; }
 }

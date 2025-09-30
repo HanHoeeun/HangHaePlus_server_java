@@ -71,7 +71,7 @@ class WalletServiceTest {
         given(walletRepository.findByUserId(userId)).willReturn(Optional.empty());
 
         // when
-        WalletBalanceResult result = walletService.getBalance(userId);
+        WalletBalanceResult result = walletService.getBalance(userId.toString());
 
         // then
         assertThat(result.userId()).isEqualTo(userId);
@@ -87,11 +87,10 @@ class WalletServiceTest {
         given(walletRepository.findByUserId(userId)).willReturn(Optional.of(existing));
 
         // when
-        WalletBalanceResult result = walletService.getBalance(userId);
+        WalletBalanceResult result = walletService.getBalance(userId.toString());
 
         // then
         assertThat(result.userId()).isEqualTo(userId);
         assertThat(result.balance()).isEqualTo(7000L);
     }
-
 }

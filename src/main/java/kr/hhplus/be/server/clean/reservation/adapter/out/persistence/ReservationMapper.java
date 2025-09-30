@@ -6,18 +6,14 @@ import kr.hhplus.be.server.domain.enums.SeatStatus;
 public class ReservationMapper {
 
     public static Reservation toDomain(ReservationJpaEntity entity) {
-        return new Reservation(
-                entity.getId(),
-                entity.getUserId(),
+        return new Reservation(entity.getId(),
                 entity.getSeatId(),
                 SeatStatus.valueOf(entity.getStatus()),
                 entity.getAmount());
     }
 
     public static ReservationJpaEntity toEntity(Reservation reservation) {
-        return new ReservationJpaEntity(
-                reservation.getId(),
-                reservation.getUserId(),
+        return new ReservationJpaEntity(reservation.getId(),
                 reservation.getSeatId(),
                 reservation.getStatus().name(),
                 reservation.getAmount());

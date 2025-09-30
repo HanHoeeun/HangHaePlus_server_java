@@ -3,10 +3,6 @@ package kr.hhplus.be.server.layered.catalog;
 import kr.hhplus.be.server.domain.enums.SeatStatus;
 import kr.hhplus.be.server.layered.catalog.dto.SeatAvailabilityDto;
 import kr.hhplus.be.server.layered.catalog.dto.ShowAvailabilityDto;
-import kr.hhplus.be.server.layered.catalog.persistence.ConcertScheduleRepository;
-import kr.hhplus.be.server.layered.catalog.persistence.Reservation;
-import kr.hhplus.be.server.layered.catalog.persistence.ReservationRepository;
-import kr.hhplus.be.server.layered.catalog.persistence.SeatRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

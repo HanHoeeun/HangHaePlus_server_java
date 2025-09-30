@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -77,5 +78,46 @@ class ReservationConcurrencyTest {
 
         assertThat(List.of(status1, status2))
                 .containsExactlyInAnyOrder("HOLD", "FAIL");
+    }
+
+    @Test
+    void only_one_out_of_ten_users_can_reserve_the_same_seat() throws Exception {
+        // given
+        UUID seatId = UUID.randomUUID();
+        int seatNumber = 1;
+        long price = 50_000L;
+        UUID showId = UUID.randomUUID();
+
+        seatRepositoryPort.save(new Seat(seatId, seatNumber, SeatStatus.AVAILABLE, price));
+
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+        CountDownLatch latch = new CountDownLatch(10);
+
+        ConcurrentLinkedQueue<String> results = new ConcurrentLinkedQueue<>();
+
+        IntStream.range(0, 10).forEach(i -> executor.submit(() -> {
+            try {
+                var result = reserveSeatUseCase.reserve(
+                        new ReserveSeatCommand(UUID.randomUUID(), showId, seatId, seatNumber)
+                );
+                results.add(result.status()); // ex) "HOLD"
+            } catch (Exception e) {
+                results.add("FAIL");
+            } finally {
+                latch.countDown();
+            }
+        }));
+
+        boolean completed = latch.await(10, TimeUnit.SECONDS);
+        assertThat(completed).isTrue(); // 시간 내에 10개 스레드가 모두 실행 완료되었는지 검증
+
+        executor.shutdown();
+
+        long holdCount = results.stream().filter("HOLD"::equals).count();
+        long failCount = results.stream().filter("FAIL"::equals).count();
+
+        // then
+        assertThat(holdCount).isEqualTo(1); // 딱 1명만 HOLD 성공
+        assertThat(holdCount + failCount).isEqualTo(10); // 총 10명 시도
     }
 }

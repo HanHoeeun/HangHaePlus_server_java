@@ -1,15 +1,16 @@
-# 콘서트 예약 서비스
+# 🎫 콘서트 예약 서비스
 
 > 대기열 + 좌석 임시배정 + 포인트 충전식 결제 기반의 콘서트 예약 서비스.
 
-## 문서
+## 🗂️ 문서
 - [API 명세서](./docs/openapi.yaml)
 - [API spec](./docs/api-spec.md)
 - [ERD](./docs/erd.md)
 - [인프라 구성도](./docs/infra.md)
 - [시퀀스 다이어그램](./docs/sequence-diagram.md)
+- [infrastructure layer](./docs/InfrastructureLayer.md)
 
-## 목표 시나리오 (선정)
+## 🎯 목표 시나리오 (선정)
 - **대기열 기반 콘서트 예약**  
   1) 사용자는 로그인 후 대기열에 진입해 토큰을 발급받는다.  
   2) 활성(Active) 상태의 사용자만 좌석 조회/예약/결제 가능.  
@@ -35,6 +36,23 @@ src/main/java/kr/hhplus/be/server
     └── catalog       # ✅ 조회 전용 (레이어드 아키텍처)
 
 ```
+🛠 Infrastructure Layer 구조
+clean/{domain}/adapter
+├── in/
+│   └── web/                         # API Controller
+├── out/
+│   ├── persistence/                # JPA 구현체
+│   │   ├── *RepositoryAdapter.java
+│   │   └── *Mapper.java
+│   ├── lock/
+│   │   └── RedisSeatLockAdapter.java   # 좌석 락 처리
+│   └── external/
+│       └── WalletServiceAdapter.java   # 외부 결제 연동 등
+
+```bash
+
+```
+
 ## 🚀 API 요약
 1️⃣ 대기열 (Queue)
 - POST /api/v1/queue/tokens → 토큰 발급
@@ -54,30 +72,47 @@ src/main/java/kr/hhplus/be/server
 5️⃣ 결제 (ConfirmReservation)
 - POST /api/v1/reservations/confirm → 결제 확정 + 좌석 소유권 부여 + 대기열 토큰 만료
 
+## ✅ 핵심 설계 포인트
+| 항목        | 설명                                             |
+| --------- | ---------------------------------------------- |
+| 동시성 제어    | SeatLockPort + RedisSeatLockAdapter 로 예약 중복 방지 |
+| 대기열 관리    | 상태(WAITING → ACTIVE → EXPIRED) 전환 + 순번 기반 처리   |
+| 클린 아키텍처   | 예약/결제는 port in/out 기반으로 책임 분리 및 테스트 용이         |
+| 레이어드 아키텍처 | Catalog(조회)는 단순 Service-Repository 구조          |
+| 테스트 전략    | 단위(Mock 기반) + 통합 테스트(Testcontainers 기반) 병행     |
+
+
 ## 🧪 테스트 구조
 ```bash
 src/test/java/kr/hhplus/be/server
-├── clean/queue/application/service
-│   └── QueueServiceTest.java
-├── clean/reservation/application/service
-│   ├── ConfirmReservationServiceTest.java
-│   ├── ReservationQueryServiceTest.java
-│   └── ReserveSeatServiceTest.java
-└── application
-    └── ReservationServiceTest.java
+├── clean/queue
+│   ├── application/service/QueueServiceTest.java
+│   └── integration/QueueTokenConcurrencyTest.java
+├── clean/reservation
+│   ├── application/service/
+│   │   ├── ReserveSeatServiceTest.java
+│   │   ├── ConfirmReservationServiceTest.java
+│   │   └── ReservationQueryServiceTest.java
+│   └── integration/
+│       ├── ReservationFlowIntegrationTest.java
+│       ├── ReservationExpireIntegrationTest.java
+│       ├── ReservationExpireWithTimeProviderTest.java
+│       ├── ReservationConcurrencyTest.java
+│       ├── ReservationPaymentIdempotencyTest.java
+│       └── SeatExpirationIntegrationTest.java
+├── clean/wallet
+│   ├── application/service/WalletServiceTest.java
+│   └── integration/WalletPaymentConcurrencyTest.java
+└── layered/catalog
+    ├── CatalogControllerTest.java
+    └── CatalogServiceTest.java
 ```
 
-- QueueServiceTest → 토큰 발급 및 상태 관리 검증
-- ReserveSeatServiceTest → 좌석 HOLD 처리 검증
-- ConfirmReservationServiceTest → 결제 시 RESERVED 전환 검증
-- ReservationQueryServiceTest → 예약 가능 조회 검증
+## 🧪 주요 통합 테스트
+- ReservationFlowIntegrationTest → 유저 전체 플로우 (토큰 → 예약 → 결제 → 잔액 확인)
+- ReservationExpireIntegrationTest → TTL 만료 후 예약 가능 여부
+- ReservationPaymentIdempotencyTest → 중복 결제 방지 (멱등성)
+- WalletPaymentConcurrencyTest → 결제 동시성 테스트 (잔액 음수 방지)
+- QueueTokenConcurrencyTest → 대기열 토큰 중복 방지
 
-👉 모든 테스트는 Mockito 기반 단위 테스트로 작성되어 DB/외부 의존성 제거
 
-## ✅ Key Point
-
-- 동시성 제어 : SeatLockPort + RedisSeatLockAdapter 로 중복 예약 방지
-- 대기열 관리 : 순번 기반 FIFO, 상태(WAITING, ACTIVE, EXPIRED) 관리
-- 클린 아키텍처 : 예약/결제는 port in/out 구조로 책임 분리 → 테스트 용이
-- 레이어드 아키텍처 : 조회 전용(Catalog) 단순 Service-Repository 구조
-- 테스트 : 핵심 로직은 모두 Mock 기반 단위 테스트로 커버

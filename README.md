@@ -37,6 +37,7 @@ src/main/java/kr/hhplus/be/server
 
 ```
 🛠 Infrastructure Layer 구조
+```bash
 clean/{domain}/adapter
 ├── in/
 │   └── web/                         # API Controller
@@ -49,7 +50,7 @@ clean/{domain}/adapter
 │   └── external/
 │       └── WalletServiceAdapter.java   # 외부 결제 연동 등
 
-```bash
+
 
 ```
 

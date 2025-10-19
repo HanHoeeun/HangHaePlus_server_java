@@ -5,4 +5,5 @@ import java.util.UUID;
 public record ConfirmReservationRequest(
         UUID reservationId,
         long amount
+
 ) {}

@@ -1,5 +1,5 @@
 package kr.hhplus.be.server.domain.enums;
 
-public enum ResevationStatus {
+public enum ReservationStatus {
     HELD, CONFIRMED, CANCELED, EXPIRED
 }

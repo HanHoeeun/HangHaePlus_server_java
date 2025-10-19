@@ -1,4 +1,4 @@
-package kr.hhplus.be.server.clean.reservation.adapter.in.web;
+package kr.hhplus.be.server.clean.reservation.adapter.in.web.controller;
 
 import kr.hhplus.be.server.clean.reservation.application.dto.ReserveSeatCommand;
 import kr.hhplus.be.server.clean.reservation.port.in.ReserveSeatUseCase;

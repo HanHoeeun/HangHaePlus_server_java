@@ -1,16 +1,16 @@
-package kr.hhplus.be.server.clean.reservation.application.dto;
+package kr.hhplus.be.server.clean.reservation.adapter.in.web.response;
 
 import java.util.List;
 import java.util.UUID;
 
-public record AvailableSeatsResult(
+public record AvailableSeatsResponse(
         UUID showId,
         List<SeatInfo> seats
 ) {
     public record SeatInfo(
             UUID seatId,
             int seatNumber,
-            long price,
-            String status
+            boolean isAvailable
     ) {}
 }
+

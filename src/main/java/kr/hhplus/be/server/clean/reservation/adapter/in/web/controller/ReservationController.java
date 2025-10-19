@@ -11,7 +11,7 @@ import java.util.*;
 @RequestMapping("/api/v1")
 public class ReservationController {
 
-    private record Req(UUID showId, List<Integer> seatIds) {}
+    private record Req(UUID showId, List<UUID> seatIds) {} // ✅ seatId는 UUID 타입
     private record Res(UUID reservationId, String status, String expiresAt, long totalAmount) {}
 
     private final ReserveSeatUseCase reserveSeat;
@@ -21,15 +21,24 @@ public class ReservationController {
     }
 
     @PostMapping("/reservations")
-    public ResponseEntity<?> reserve(@RequestBody Req req,
-                                     @RequestHeader("X-User-Id") UUID userId) {
-        if (req.seatIds() == null || req.seatIds().isEmpty())
+    public ResponseEntity<?> reserve(
+            @RequestBody Req req,
+            @RequestHeader("X-User-Id") UUID userId
+    ) {
+        if (req.seatIds() == null || req.seatIds().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "code","VALIDATION_ERROR","message","seatIds required"
+                    "code", "VALIDATION_ERROR",
+                    "message", "seatIds required"
             ));
+        }
 
-        int seatNo = req.seatIds().get(0); // 단일 좌석 처리
-        var result = reserveSeat.reserve(new ReserveSeatCommand(userId, req.showId(), seatNo));
+        // 단일 좌석 예약 처리
+        UUID seatId = req.seatIds().get(0);
+        int seatNumber = 1; // 필요시 Seat 조회로 실제 seatNumber 계산 가능
+
+        var result = reserveSeat.reserve(
+                new ReserveSeatCommand(userId, req.showId(), seatId, seatNumber)
+        );
 
         return ResponseEntity.status(201).body(Map.of(
                 "reservationId", result.reservationId(),
@@ -38,6 +47,4 @@ public class ReservationController {
                 "totalAmount", result.totalAmount()
         ));
     }
-
-
 }

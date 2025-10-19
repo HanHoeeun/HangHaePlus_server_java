@@ -7,6 +7,7 @@ import kr.hhplus.be.server.domain.enums.ReservationStatus;
 import kr.hhplus.be.server.clean.reservation.port.in.ReserveSeatUseCase;
 import kr.hhplus.be.server.clean.reservation.port.out.SeatRepositoryPort;
 import kr.hhplus.be.server.clean.reservation.port.out.SeatLockPort;
+import kr.hhplus.be.server.domain.enums.SeatStatus;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -30,22 +31,22 @@ public class ReserveSeatService implements ReserveSeatUseCase {
         Seat seat = seatRepository.findById(seatId)
                 .orElseThrow(() -> new IllegalArgumentException("좌석 없음"));
 
-        // 1️⃣ 좌석 상태 변경 (HOLD 등)
+        // 1 좌석 상태 변경 (HOLD 등)
         seat.hold();
         seatRepository.save(seat);
 
-        // 2️⃣ 임시배정 만료 시간 (5분 뒤)
+        // 2 임시배정 만료 시간 (5분 뒤)
         Instant expiresAt = Instant.now().plus(5, ChronoUnit.MINUTES);
 
-        // 3️⃣ 예약 ID (실제 구현에서는 Reservation 생성 후 ID 반환)
+        // 3 예약 ID
         UUID reservationId = UUID.randomUUID();
 
-        // 4️⃣ 결과 반환 (신규 필드 포함)
+        // 4 결과 반환
         return new ReserveSeatResult(
                 reservationId,
                 seat.getId(),
                 seat.getSeatNumber(),
-                ReservationStatus.HELD,
+                SeatStatus.HOLD,
                 expiresAt,
                 seat.getPrice()
         );

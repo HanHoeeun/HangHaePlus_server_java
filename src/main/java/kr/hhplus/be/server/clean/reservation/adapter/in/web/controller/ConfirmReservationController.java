@@ -17,11 +17,12 @@ public class ConfirmReservationController {
 
     @PostMapping("/{reservationId}/confirm")
     public Reservation confirm(
+            @RequestHeader("X-User-Id") UUID userId,
             @PathVariable UUID reservationId,
             @RequestParam long amount
     ) {
         return confirmReservationUseCase.confirm(
-                new ConfirmReservationCommand(reservationId, amount)
+                new ConfirmReservationCommand(userId, reservationId, amount)
         );
     }
 }
